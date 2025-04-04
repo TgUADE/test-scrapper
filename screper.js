@@ -274,7 +274,7 @@ app.post("/webhook", (req, res) => {
     console.error("No se recibió token en el webhook.");
     return res.status(400).send("Falta el token en la solicitud.");
   }
-  if (token !== process.env.TOKEN) {
+  if (token !== process.env.API_TOKEN) {
     console.error("Token inválido.");
     return res.status(403).send("Token inválido.");
   }

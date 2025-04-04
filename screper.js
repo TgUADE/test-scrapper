@@ -291,4 +291,8 @@ app.post("/webhook", (req, res) => {
 
 app.listen(port, () => {
   console.log(`Servidor escuchando en http://localhost:${port}`);
+  console.log("API_TOKEN:", process.env.API_TOKEN);
+  console.log("TOTP_SECRET:", process.env.TOKEN_CODE);
+  console.log("USER_EMAIL:", process.env.USER_EMAIL);
+  console.log("USER_PASSWORD:", process.env.USER_PASSWORD);
 });

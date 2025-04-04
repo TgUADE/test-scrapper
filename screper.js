@@ -150,7 +150,7 @@ async function loginTiendanube(email, password, orderId, res) {
       ".nimbus-input_input__rlcyv70",
       {
         visible: true,
-        timeout: 30000,
+        timeout: 60000,
       }
     );
     await searchInput.click();

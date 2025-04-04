@@ -10,7 +10,7 @@ const port = 3000;
 app.use(express.json());
 
 // Obtén el secreto TOTP desde las variables de entorno
-const secret = process.env.TOTP_SECRET || "F6AH7JVXZEQW5S4L";
+const secret = process.env.TOKEN_CODE;
 if (!secret) {
   console.error(
     "TOTP_SECRET no está configurado. Por favor, configúralo en las variables de entorno."
@@ -264,13 +264,26 @@ async function loginTiendanube(email, password, orderId, res) {
 
 // Configurar el webhook en Express para recibir el orderId desde n8n
 app.post("/webhook", (req, res) => {
-  const orderId = req.body.orderId; // Se asume que el body contiene el orderId
+  const orderId = req.body.orderId;
+  const token = req.headers["x-token"];
+  if (!orderId) {
+    console.error("No se recibió orderId en el webhook.");
+    return res.status(400).send("Falta el orderId en la solicitud.");
+  }
+  if (!token) {
+    console.error("No se recibió token en el webhook.");
+    return res.status(400).send("Falta el token en la solicitud.");
+  }
+  if (token !== process.env.TOKEN) {
+    console.error("Token inválido.");
+    return res.status(403).send("Token inválido.");
+  }
   console.log(`Recibido orderId desde el webhook: ${orderId}`);
 
   // Llamar a la función de Puppeteer con el orderId recibido
   loginTiendanube(
-    "automatizaciones@perlastorearg.com",
-    "Tomiltm123456",
+    process.env.USER_EMAIL,
+    process.env.USER_PASSWORD,
     orderId,
     res
   );

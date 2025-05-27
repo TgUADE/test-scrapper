@@ -32,7 +32,12 @@ function generateToken() {
 async function loginTiendanube(orderId) {
   const browser = await puppeteer.launch({
     headless: "shell",
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-gpu",
+      "--disable-dev-shm-usage", // evita problemas de memoria compartida
+    ],
   });
 
   try {

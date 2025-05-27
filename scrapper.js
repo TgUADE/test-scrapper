@@ -101,7 +101,6 @@ async function loginTiendanube(orderId) {
       "https://perlastore6.mitiendanube.com/admin/v2/apps/envionube/ar/dashboard",
       { waitUntil: "networkidle2", timeout: 60000 }
     );
-    await page.waitForTimeout(1000);
 
     if (!authHeader) {
       throw new Error("No se capturó ningún header Authorization");
@@ -137,54 +136,65 @@ async function loginTiendanube(orderId) {
       orderId
     );
 
-    // 6) Extraer tabla (opcional logging)
-    const tableData = await frame.$$eval("table", (tables) => {
-      const table = tables[0];
-      return Array.from(table.querySelectorAll("tr")).map((tr) =>
-        Array.from(tr.querySelectorAll("th, td")).map((cell) =>
-          cell.innerText.trim()
-        )
-      );
+    // 6) Click directo en el <a> de la orden para ir a detalle
+    const orderSelector =
+      "tbody.nimbus-table_container__body__1ifaixp2:nth-child(2) > tr:nth-child(1) > td:nth-child(2) > a:nth-child(1)";
+    await frame.waitForSelector(orderSelector, {
+      visible: true,
+      timeout: 30000,
     });
-    console.log("📋 Tabla tras búsqueda:", tableData);
+    await Promise.all([
+      frame.click(orderSelector),
+      page.waitForNavigation({ waitUntil: "networkidle2", timeout: 30000 }),
+    ]);
+    console.log(`✅ Navegado a detalles de la orden ${orderId}`);
 
-    // 7) Seleccionar checkbox, desplegar dropdown
-    const rows = await frame.$$("table tbody tr");
-    let foundRow = false;
-    for (const row of rows) {
-      const text = await row.evaluate((r) => r.innerText);
-      if (text.includes(orderId)) {
-        foundRow = true;
-        await row.$eval("td:nth-child(1) label", (el) => el.click());
-        await frame.click(
-          "div.nimbus-box_position-relative-xs__cklfii129 div:nth-child(1)"
-        );
-        const optVal = await frame.$eval(
-          "#massive-actions > option:nth-child(2)",
-          (el) => el.value
-        );
-        await frame.select("#massive-actions", optVal);
-        await frame.click("button.nimbus-button_appearance_primary__fymkre1");
-        break;
-      }
+    // --- NUEVO BLOQUE: extraer el ID de la URL ---
+    const fullUrl = page.url();
+    const match = fullUrl.match(/#\/shipping-details\/([^/?#]+)/);
+    const shippingDetailsId = match ? match[1] : null;
+
+    if (!shippingDetailsId) {
+      throw new Error(
+        `No pude extraer el ID de shipping-details de la URL: ${fullUrl}`
+      );
     }
-    if (!foundRow) {
-      throw new Error(`Orden ${orderId} no encontrada en la tabla`);
+    console.log(`🆔 Shipping Details ID: ${shippingDetailsId}`);
+
+    // --- Nuevo paso: enviar POST a dispatches ---
+    const dispatchUrl =
+      "https://nuvem-envio-app-back.ms.tiendanube.com/stores/dispatches";
+    const payload = {
+      createFile: {},
+      contentDeclaration: false,
+      label: true,
+      ordersIds: [shippingDetailsId],
+    };
+    const response = await fetch(dispatchUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: authHeader,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(
+        `Error enviando dispatch (${response.status}): ${errText}`
+      );
     }
+    console.log("🚀 Dispatch enviado con éxito:", payload);
 
-    // 8) Extraer código de seguimiento
-    const trackSel =
-      "tbody.nimbus-table_container__body__1ifaixp2 tr:nth-child(1) td:nth-child(6) a";
-    await frame.waitForSelector(trackSel, { visible: true, timeout: 30000 });
-    const fullTracking = await frame.$eval(
-      trackSel,
-      (a) => a.getAttribute("title") || a.textContent.trim()
-    );
-
-    console.log("📦 Código de seguimiento:", fullTracking);
-    return { authHeader, tracking: fullTracking };
-  } finally {
+    return { authHeader, shippingDetailsId };
+  } catch (err) {
     await browser.close();
+    throw err;
+  } finally {
+    if (browser) {
+      console.log("Cerrando navegador...");
+      await browser.close();
+    }
   }
 }
 
@@ -202,8 +212,13 @@ app.post("/webhook", async (req, res) => {
   for (let i = 1; i <= MAX_ATTEMPTS; i++) {
     try {
       console.log(`🔄 Intento ${i} de login + extracción`);
-      const { authHeader, tracking } = await loginTiendanube(orderId);
-      return res.json({ authorization: authHeader, tracking });
+      const { authHeader, shippingDetailsId } = await loginTiendanube(orderId);
+      // Devolver respuesta exitosa 200
+      return res.status(200).send({
+        message: `Proceso completado con éxito en intento ${i}`,
+        authHeader,
+        shippingDetailsId,
+      });
     } catch (err) {
       console.error(`❌ Error intento ${i}:`, err.message);
       if (i === Number(MAX_ATTEMPTS)) {

@@ -31,7 +31,7 @@ function generateToken() {
 
 async function loginTiendanube(orderId) {
   const browser = await puppeteer.launch({
-    headless: false,
+    headless: "shell",
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
 

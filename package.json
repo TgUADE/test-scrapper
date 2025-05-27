@@ -4,7 +4,7 @@
   "main": "screper.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node screper.js"
+    "start": "node scrapper.js"
   },
   "author": "",
   "license": "ISC",

@@ -5,7 +5,7 @@ const express = require("express");
 
 // Configuración básica de Express para manejar el webhook
 const app = express();
-const port = 3000;
+const port = 3001;
 
 app.use(express.json());
 
@@ -57,7 +57,7 @@ async function loginTiendanube(email, password, orderId, res) {
   let browser;
   try {
     browser = await puppeteer.launch({
-      headless: "shell",
+      headless: false,
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
     });
 
@@ -201,7 +201,9 @@ async function loginTiendanube(email, password, orderId, res) {
           console.error(
             `No se encontró el checkbox en la fila que contiene la orden ${orderId}`
           );
-          break;
+          return res
+            .status(500)
+            .send(`Error: No se encontró el checkbox para la orden ${orderId}`);
         }
         await checkbox.click();
 

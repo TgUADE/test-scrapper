@@ -1335,28 +1335,45 @@ app.post("/webhook", async (req, res) => {
   if (token !== API_TOKEN) return res.status(403).send("Token inválido");
 
   console.log("🔔 Webhook recibido, orderId:", orderId);
+
+  // Determinar qué función usar basado en SIMPLE_MODE
+  const isSimpleMode = SIMPLE_MODE === "true" || SIMPLE_MODE === true;
+  const loginFunction = isSimpleMode ? simpleLogin : loginTiendanube;
+  const modeText = isSimpleMode ? "MODO SIMPLE" : "MODO AVANZADO";
+
+  console.log(`🎯 Usando ${modeText}`);
+
   for (let i = 1; i <= MAX_ATTEMPTS; i++) {
     try {
-      console.log(`🔄 Intento ${i} de login + extracción`);
-      const { authHeader, shippingDetailsId } = await loginTiendanube(orderId);
+      console.log(`🔄 Intento ${i} de login + extracción (${modeText})`);
+      const { authHeader, shippingDetailsId } = await loginFunction(orderId);
       // Devolver respuesta exitosa 200
       return res.status(200).send({
-        message: `Proceso completado con éxito en intento ${i}`,
+        message: `Proceso completado con éxito en intento ${i} (${modeText})`,
         authHeader,
         shippingDetailsId,
+        mode: modeText,
       });
     } catch (err) {
-      console.error(`❌ Error intento ${i}:`, err.message);
+      console.error(`❌ Error intento ${i} (${modeText}):`, err.message);
       if (i === Number(MAX_ATTEMPTS)) {
         return res
           .status(500)
-          .send(`No fue posible completar el proceso: ${err.message}`);
+          .send(
+            `No fue posible completar el proceso (${modeText}): ${err.message}`
+          );
       }
       await new Promise((r) => setTimeout(r, 2000));
     }
   }
 });
 
-app.listen(PORT, () =>
-  console.log(`⚡️ Servidor escuchando en http://localhost:${PORT}`)
-);
+app.listen(PORT, () => {
+  const modeText =
+    SIMPLE_MODE === "true" || SIMPLE_MODE === true
+      ? "MODO SIMPLE"
+      : "MODO AVANZADO";
+  console.log(
+    `⚡️ Servidor escuchando en http://localhost:${PORT} - ${modeText}`
+  );
+});

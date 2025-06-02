@@ -18,6 +18,7 @@ const {
   API_TOKEN,
   PORT = 3001,
   MAX_ATTEMPTS = 3,
+  SIMPLE_MODE = false,
 } = process.env;
 
 if (!USER_EMAIL || !USER_PASSWORD || !TOKEN_CODE || !API_TOKEN) {
@@ -32,6 +33,288 @@ puppeteer.use(StealthPlugin());
 
 // Archivo para guardar las cookies
 const COOKIES_FILE = path.join(__dirname, "session_cookies.json");
+
+// NUEVAS FUNCIONES ANTI-DETECCIÓN AVANZADAS
+async function addAdvancedAntiDetection(page) {
+  // 1. Evasión de detección de headless más sofisticada
+  await page.evaluateOnNewDocument(() => {
+    // Simular propiedades del navegador real
+    Object.defineProperty(navigator, "webdriver", {
+      get: () => undefined,
+    });
+
+    // Agregar propiedades faltantes del navegador
+    window.chrome = {
+      runtime: {
+        onConnect: null,
+        onMessage: null,
+      },
+      loadTimes: function () {
+        return {
+          commitLoadTime: Date.now() / 1000 - Math.random() * 60,
+          finishDocumentLoadTime: Date.now() / 1000 - Math.random() * 10,
+          finishLoadTime: Date.now() / 1000 - Math.random() * 5,
+          firstPaintTime: Date.now() / 1000 - Math.random() * 10,
+          navigationType: "navigate",
+          wasFetchedViaSpdy: false,
+          wasNpnNegotiated: false,
+        };
+      },
+      csi: function () {
+        return {
+          pageT: Date.now(),
+          tran: 15,
+        };
+      },
+      app: {
+        isInstalled: false,
+        InstallState: "not_installed",
+        RunningState: "cannot_run",
+      },
+    };
+
+    // Simular propiedades de pantalla realistas
+    Object.defineProperty(window, "outerWidth", {
+      get: () => window.innerWidth,
+    });
+    Object.defineProperty(window, "outerHeight", {
+      get: () => window.innerHeight + Math.floor(Math.random() * 100),
+    });
+
+    // Simular timezone y propiedades de fecha
+    const getTimezoneOffset = Date.prototype.getTimezoneOffset;
+    Date.prototype.getTimezoneOffset = function () {
+      return getTimezoneOffset.apply(this) + Math.floor(Math.random() * 2);
+    };
+
+    // Evasión de detección de automatización más avanzada
+    const originalQuery = window.navigator.permissions.query;
+    window.navigator.permissions.query = (parameters) =>
+      parameters.name === "notifications"
+        ? Promise.resolve({ state: Notification.permission })
+        : originalQuery(parameters);
+
+    // Simular hardware más realista
+    Object.defineProperty(navigator, "hardwareConcurrency", {
+      get: () => 4 + Math.floor(Math.random() * 4),
+    });
+
+    Object.defineProperty(navigator, "deviceMemory", {
+      get: () => 8,
+    });
+
+    // Simular plugins de navegador real
+    Object.defineProperty(navigator, "plugins", {
+      get: () => [
+        {
+          name: "Chrome PDF Plugin",
+          filename: "internal-pdf-viewer",
+          description: "Portable Document Format",
+        },
+        {
+          name: "Chrome PDF Viewer",
+          filename: "mhjfbmdgcfjbbpaeojofohoefgiehjai",
+          description: "",
+        },
+        {
+          name: "Native Client",
+          filename: "internal-nacl-plugin",
+          description: "",
+        },
+      ],
+    });
+
+    // Evasión de detección de canvas fingerprinting
+    const getContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type) {
+      const context = getContext.apply(this, arguments);
+      if (type === "2d") {
+        const originalFillText = context.fillText;
+        context.fillText = function () {
+          // Agregar ruido mínimo al texto para evitar fingerprinting
+          const args = Array.from(arguments);
+          if (args[1]) args[1] += Math.random() * 0.1;
+          if (args[2]) args[2] += Math.random() * 0.1;
+          return originalFillText.apply(this, args);
+        };
+      }
+      return context;
+    };
+
+    // Evasión de detección de WebGL fingerprinting
+    const getParameter = WebGLRenderingContext.prototype.getParameter;
+    WebGLRenderingContext.prototype.getParameter = function (parameter) {
+      if (parameter === 37445) {
+        return "Intel Open Source Technology Center";
+      }
+      if (parameter === 37446) {
+        return "Mesa DRI Intel(R) HD Graphics 5500 (Broadwell GT2)";
+      }
+      return getParameter.apply(this, arguments);
+    };
+
+    // Simular eventos de interacción humana
+    ["mousemove", "keydown", "scroll"].forEach((eventType) => {
+      const originalAddEventListener = EventTarget.prototype.addEventListener;
+      EventTarget.prototype.addEventListener = function (
+        type,
+        listener,
+        options
+      ) {
+        if (type === eventType) {
+          const originalListener = listener;
+          listener = function (event) {
+            // Agregar propiedades humanas al evento
+            if (eventType === "mousemove") {
+              Object.defineProperty(event, "isTrusted", { value: true });
+            }
+            return originalListener.apply(this, arguments);
+          };
+        }
+        return originalAddEventListener.call(this, type, listener, options);
+      };
+    });
+  });
+
+  // 2. Configurar headers HTTP más realistas y variables
+  const randomHeaders = {
+    "Accept-Language": [
+      "es-ES,es;q=0.9,en-US;q=0.8,en;q=0.7",
+      "es-AR,es;q=0.9,en;q=0.8",
+    ][Math.floor(Math.random() * 2)],
+    "Accept-Encoding": "gzip, deflate, br",
+    Accept:
+      "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-User": "?1",
+    "Sec-Fetch-Dest": "document",
+    "Cache-Control": ["max-age=0", "no-cache"][Math.floor(Math.random() * 2)],
+    DNT: "1",
+    Connection: "keep-alive",
+  };
+
+  await page.setExtraHTTPHeaders(randomHeaders);
+
+  // 3. Simular viewport y características de dispositivo realistas
+  const viewports = [
+    { width: 1920, height: 1080 },
+    { width: 1366, height: 768 },
+    { width: 1440, height: 900 },
+    { width: 1536, height: 864 },
+  ];
+  const selectedViewport =
+    viewports[Math.floor(Math.random() * viewports.length)];
+
+  await page.setViewport({
+    ...selectedViewport,
+    deviceScaleFactor: 1 + Math.random() * 0.5,
+    isMobile: false,
+    hasTouch: false,
+    isLandscape: selectedViewport.width > selectedViewport.height,
+  });
+}
+
+// Función mejorada para simular comportamiento humano
+async function simulateHumanBehavior(page) {
+  // Movimientos de mouse más naturales con curvas
+  const moveMouseNaturally = async (targetX, targetY, steps = 10) => {
+    const currentMouse = await page.mouse;
+    let currentX = Math.random() * 100;
+    let currentY = Math.random() * 100;
+
+    for (let i = 0; i <= steps; i++) {
+      const progress = i / steps;
+      // Usar curva easing para movimiento más natural
+      const easeProgress = 1 - Math.pow(1 - progress, 3);
+
+      const x =
+        currentX +
+        (targetX - currentX) * easeProgress +
+        (Math.random() - 0.5) * 5;
+      const y =
+        currentY +
+        (targetY - currentY) * easeProgress +
+        (Math.random() - 0.5) * 5;
+
+      await currentMouse.move(x, y);
+      await new Promise((r) => setTimeout(r, 10 + Math.random() * 20));
+    }
+  };
+
+  // Simular scroll natural
+  const naturalScroll = async () => {
+    const scrollSteps = 3 + Math.floor(Math.random() * 5);
+    for (let i = 0; i < scrollSteps; i++) {
+      await page.evaluate(() => {
+        window.scrollBy(0, 100 + Math.random() * 200);
+      });
+      await new Promise((r) => setTimeout(r, 500 + Math.random() * 1000));
+    }
+  };
+
+  // Simular pausas de lectura
+  const readingPause = async () => {
+    await new Promise((r) => setTimeout(r, 2000 + Math.random() * 3000));
+  };
+
+  // Movimientos aleatorios de exploración
+  for (let i = 0; i < 3; i++) {
+    await moveMouseNaturally(Math.random() * 800, Math.random() * 600);
+    await new Promise((r) => setTimeout(r, 500 + Math.random() * 1000));
+  }
+
+  await naturalScroll();
+  await readingPause();
+}
+
+// Función mejorada para typing humano
+async function humanType(page, selector, text, options = {}) {
+  const element = await page.$(selector);
+  if (!element) throw new Error(`Element ${selector} not found`);
+
+  // Hacer hover y focus con delay natural
+  await page.hover(selector);
+  await new Promise((r) => setTimeout(r, 200 + Math.random() * 300));
+
+  await page.click(selector);
+  await new Promise((r) => setTimeout(r, 100 + Math.random() * 200));
+
+  // Simular errores de tipeo ocasionales
+  const shouldMakeTypo = Math.random() < 0.1; // 10% chance de error
+
+  if (shouldMakeTypo && text.length > 5) {
+    // Escribir con un error y luego corregir
+    const errorPos = Math.floor(Math.random() * (text.length - 2)) + 1;
+    const beforeError = text.substring(0, errorPos);
+    const afterError = text.substring(errorPos);
+
+    // Escribir hasta el error
+    await page.type(selector, beforeError, { delay: 80 + Math.random() * 40 });
+
+    // Escribir carácter incorrecto
+    await page.type(selector, "x", { delay: 80 + Math.random() * 40 });
+    await new Promise((r) => setTimeout(r, 200 + Math.random() * 300));
+
+    // Corregir con backspace
+    await page.keyboard.press("Backspace");
+    await new Promise((r) => setTimeout(r, 100 + Math.random() * 200));
+
+    // Continuar con el resto
+    await page.type(selector, afterError, { delay: 80 + Math.random() * 40 });
+  } else {
+    // Typing normal con variación en velocidad
+    for (const char of text) {
+      await page.type(selector, char, { delay: 60 + Math.random() * 80 });
+
+      // Pausas ocasionales como si estuviera pensando
+      if (Math.random() < 0.05) {
+        await new Promise((r) => setTimeout(r, 300 + Math.random() * 500));
+      }
+    }
+  }
+}
 
 // Función para guardar cookies
 async function saveCookies(page) {
@@ -134,6 +417,161 @@ function generateToken() {
   }
 }
 
+// MODO SIMPLE (como index.js)
+async function simpleLogin(orderId) {
+  console.log("🔄 Usando MODO SIMPLE (como index.js)");
+
+  const browser = await puppeteer.launch({
+    headless: "shell",
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  });
+
+  try {
+    const page = await browser.newPage();
+    let authHeader = null;
+
+    // Interceptar requests
+    page.on("request", (req) => {
+      const url = req.url();
+      if (
+        (url.includes("/stores/orders") ||
+          url.includes("/api/") ||
+          url.includes("/admin/") ||
+          url.includes("envionube") ||
+          url.includes("nuvem-envio-app-back.ms.tiendanube.com")) &&
+        req.headers().authorization
+      ) {
+        authHeader = req.headers().authorization;
+        console.log(
+          `✅ Header Authorization capturado (modo simple): ${authHeader.substring(
+            0,
+            20
+          )}...`
+        );
+      }
+    });
+
+    // 1) Login directo
+    console.log("🔑 Login directo...");
+    await page.goto("https://www.tiendanube.com/login", {
+      waitUntil: "networkidle2",
+    });
+    await page.type("#user-mail", USER_EMAIL, { delay: 100 });
+    await page.type("#pass", USER_PASSWORD, { delay: 100 });
+    await Promise.all([
+      page.click(".js-tkit-loading-button"),
+      page.waitForNavigation({ waitUntil: "networkidle2" }),
+    ]);
+
+    // 2) 2FA
+    console.log("🔐 2FA...");
+    const code2FA = generateToken();
+    await page.type("#code", code2FA, { delay: 100 });
+    await Promise.all([
+      page.click("#authentication-factor-verify-page input[type='submit']"),
+      page.waitForNavigation({ waitUntil: "networkidle2" }),
+    ]);
+
+    // 3) Dashboard
+    console.log("🏠 Navegando al dashboard...");
+    await page.goto(
+      "https://perlastore6.mitiendanube.com/admin/v2/apps/envionube/ar/dashboard",
+      { waitUntil: "networkidle2" }
+    );
+
+    // Esperar token
+    await new Promise((r) => setTimeout(r, 3000));
+
+    if (!authHeader) {
+      throw new Error(
+        "No se capturó ningún header Authorization (modo simple)"
+      );
+    }
+
+    // Continuar con el flujo de búsqueda igual que el modo complejo
+    const iframeH = await page.waitForSelector(
+      'iframe[data-testid="iframe-app"]',
+      {
+        visible: true,
+        timeout: 30000,
+      }
+    );
+    const frame = await iframeH.contentFrame();
+    if (!frame) throw new Error("No se pudo leer el iframe");
+
+    const searchInput = await frame.waitForSelector(
+      ".nimbus-input_input__rlcyv70",
+      {
+        visible: true,
+        timeout: 30000,
+      }
+    );
+    await searchInput.click();
+    await searchInput.type(orderId, { delay: 50 });
+    await searchInput.press("Enter");
+
+    await frame.waitForFunction(
+      (id) =>
+        Array.from(document.querySelectorAll("table")).some((t) =>
+          t.innerText.includes(id)
+        ),
+      { timeout: 30000 },
+      orderId
+    );
+
+    const orderSelector =
+      "tbody.nimbus-table_container__body__1ifaixp2:nth-child(2) > tr:nth-child(1) > td:nth-child(2) > a:nth-child(1)";
+    await frame.waitForSelector(orderSelector, {
+      visible: true,
+      timeout: 30000,
+    });
+    await Promise.all([
+      frame.click(orderSelector),
+      page.waitForNavigation({ waitUntil: "networkidle2", timeout: 30000 }),
+    ]);
+
+    const fullUrl = page.url();
+    const match = fullUrl.match(/#\/shipping-details\/([^/?#]+)/);
+    const shippingDetailsId = match ? match[1] : null;
+
+    if (!shippingDetailsId) {
+      throw new Error(
+        `No pude extraer el ID de shipping-details de la URL: ${fullUrl}`
+      );
+    }
+
+    const dispatchUrl =
+      "https://nuvem-envio-app-back.ms.tiendanube.com/stores/dispatches";
+    const payload = {
+      createFile: {},
+      contentDeclaration: false,
+      label: true,
+      ordersIds: [shippingDetailsId],
+    };
+
+    const response = await fetch(dispatchUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: authHeader,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(
+        `Error enviando dispatch (${response.status}): ${errText}`
+      );
+    }
+
+    console.log("🚀 Dispatch enviado con éxito (modo simple):", payload);
+    return { authHeader, shippingDetailsId };
+  } finally {
+    await browser.close();
+  }
+}
+
 async function loginTiendanube(orderId) {
   // Generar user agent aleatorio pero realista
   const userAgent = new UserAgent();
@@ -154,7 +592,7 @@ async function loginTiendanube(orderId) {
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
-      "--disable-blink-features=AutomationControlled", // Crítico para evitar detección
+      "--disable-blink-features=AutomationControlled",
       "--disable-extensions",
       "--disable-plugins",
       "--disable-background-timer-throttling",
@@ -171,31 +609,37 @@ async function loginTiendanube(orderId) {
       "--disable-client-side-phishing-detection",
       "--disable-datasaver-prompt",
       "--disable-domain-reliability",
-      "--disable-features=TranslateUI",
+      "--disable-features=TranslateUI,VizDisplayCompositor",
       "--mute-audio",
       "--no-default-browser-check",
       "--no-pings",
       "--password-store=basic",
       "--use-mock-keychain",
-      // Argumentos adicionales para bypass de detección
       "--disable-automation",
       "--exclude-switches=enable-automation",
       "--disable-extensions-http-throttling",
       "--metrics-recording-only",
       "--no-report-upload",
       "--safebrowsing-disable-auto-update",
+      "--disable-features=VizDisplayCompositor",
+      "--run-all-compositor-stages-before-draw",
+      "--disable-threaded-animation",
+      "--disable-threaded-scrolling",
+      "--disable-checker-imaging",
+      "--disable-new-content-rendering-timeout",
+      "--disable-image-animation-resync",
     ],
     headless: "shell",
-    slowMo: 50 + Math.floor(Math.random() * 50), // Delay aleatorio para parecer humano
+    slowMo: 30 + Math.floor(Math.random() * 40),
     defaultViewport: randomViewport,
-    ignoreDefaultArgs: ["--disable-extensions", "--enable-automation"], // Permitir extensiones
+    ignoreDefaultArgs: ["--disable-extensions", "--enable-automation"],
     ignoreHTTPSErrors: true,
     timeout: 60000,
     devtools: false,
   };
 
   console.log(
-    "🚀 Intentando lanzar browser con configuración anti-detección..."
+    "🚀 Intentando lanzar browser con configuración anti-detección avanzada..."
   );
 
   let browser;
@@ -203,33 +647,18 @@ async function loginTiendanube(orderId) {
     browser = await puppeteer.launch(browserOptions);
   } catch (launchError) {
     console.error("💥 Error al lanzar el browser:", launchError.message);
-
-    // Intentar con configuración más básica
-    console.log("🔄 Intentando con configuración básica...");
-    const basicOptions = {
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-      ],
-      headless: "shell",
-      slowMo: 0,
-      ignoreHTTPSErrors: true,
-    };
-
-    try {
-      browser = await puppeteer.launch(basicOptions);
-    } catch (basicError) {
-      console.error("💀 Error crítico: No se pudo lanzar el browser");
-      throw new Error(`No se pudo lanzar el browser: ${basicError.message}`);
-    }
+    throw new Error(`No se pudo lanzar el browser: ${launchError.message}`);
   }
 
   try {
     const page = await browser.newPage();
 
+    // APLICAR TÉCNICAS ANTI-DETECCIÓN AVANZADAS
+    await addAdvancedAntiDetection(page);
+
     // Establecer user agent aleatorio
     await page.setUserAgent(randomUA);
+    console.log(`🎭 User Agent configurado: ${randomUA.substring(0, 50)}...`);
 
     // TÉCNICA 1: Ocultar que es un navegador automatizado
     await page.evaluateOnNewDocument(() => {
@@ -284,20 +713,6 @@ async function loginTiendanube(orderId) {
       Object.defineProperty(navigator, "languages", {
         get: () => ["es-ES", "es", "en-US", "en"],
       });
-    });
-
-    // TÉCNICA 6: Configurar headers HTTP realistas
-    await page.setExtraHTTPHeaders({
-      "Accept-Language": "es-ES,es;q=0.9,en-US;q=0.8,en;q=0.7",
-      "Accept-Encoding": "gzip, deflate, br",
-      Accept:
-        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
-      "Upgrade-Insecure-Requests": "1",
-      "Cache-Control": "max-age=0",
-      "Sec-Fetch-Site": "none",
-      "Sec-Fetch-Mode": "navigate",
-      "Sec-Fetch-User": "?1",
-      "Sec-Fetch-Dest": "document",
     });
 
     // TÉCNICA 7: Función para detectar y evadir reCAPTCHA
@@ -501,6 +916,18 @@ async function loginTiendanube(orderId) {
     // 🔑 FLUJO COMPLETO DE LOGIN (solo si las cookies no funcionaron)
     if (!authHeader) {
       console.log("🔑 PASO 1: Navegando a página de login...");
+
+      // Simular comportamiento humano antes del login
+      await page.goto("https://www.tiendanube.com", {
+        waitUntil: "networkidle2",
+        timeout: 60000,
+      });
+      logCurrentUrl("página principal antes de login");
+
+      // Simular exploración humana
+      await simulateHumanBehavior(page);
+
+      // Ahora ir al login
       await page.goto("https://www.tiendanube.com/login", {
         waitUntil: "networkidle2",
         timeout: 60000,
@@ -508,48 +935,130 @@ async function loginTiendanube(orderId) {
       logCurrentUrl("después de navegar a página de login");
       console.log("✅ Página de login cargada");
 
+      // Simular comportamiento de lectura de la página
+      await simulateHumanBehavior(page);
+
       // Verificar y resolver reCAPTCHA si está presente
       await solveRecaptchaIfPresent();
       logCurrentUrl("después de verificar reCAPTCHA en login");
 
       console.log(`📝 Escribiendo email: ${USER_EMAIL}`);
-      // Simular comportamiento humano más realista
-      await page.hover("#user-mail");
-      await new Promise((r) => setTimeout(r, 100 + Math.random() * 200));
-      await page.click("#user-mail");
-      await new Promise((r) => setTimeout(r, 200 + Math.random() * 300));
-      await page.type("#user-mail", USER_EMAIL, {
-        delay: 50 + Math.random() * 50,
-      });
-      console.log("✅ Email escrito");
+
+      // Usar la nueva función de typing humano
+      try {
+        await humanType(page, "#user-mail", USER_EMAIL);
+        console.log("✅ Email escrito con comportamiento humano");
+      } catch (emailError) {
+        console.log("⚠️ Error con typing humano, usando método alternativo");
+        await page.hover("#user-mail");
+        await new Promise((r) => setTimeout(r, 100 + Math.random() * 200));
+        await page.click("#user-mail");
+        await new Promise((r) => setTimeout(r, 200 + Math.random() * 300));
+        await page.type("#user-mail", USER_EMAIL, {
+          delay: 50 + Math.random() * 50,
+        });
+      }
+
+      // Pausa natural entre campos
+      await new Promise((r) => setTimeout(r, 500 + Math.random() * 1000));
 
       console.log("📝 Escribiendo password...");
-      await page.hover("#pass");
-      await new Promise((r) => setTimeout(r, 100 + Math.random() * 200));
-      await page.click("#pass");
-      await new Promise((r) => setTimeout(r, 200 + Math.random() * 300));
-      await page.type("#pass", USER_PASSWORD, {
-        delay: 50 + Math.random() * 50,
-      });
-      console.log("✅ Password escrito");
+
+      try {
+        await humanType(page, "#pass", USER_PASSWORD);
+        console.log("✅ Password escrito con comportamiento humano");
+      } catch (passError) {
+        console.log(
+          "⚠️ Error con typing humano en password, usando método alternativo"
+        );
+        await page.hover("#pass");
+        await new Promise((r) => setTimeout(r, 100 + Math.random() * 200));
+        await page.click("#pass");
+        await new Promise((r) => setTimeout(r, 200 + Math.random() * 300));
+        await page.type("#pass", USER_PASSWORD, {
+          delay: 50 + Math.random() * 50,
+        });
+      }
+
+      // Simular que el usuario lee los términos o revisa la página
+      await new Promise((r) => setTimeout(r, 1000 + Math.random() * 2000));
 
       // Verificar reCAPTCHA antes del submit
       await solveRecaptchaIfPresent();
       logCurrentUrl("antes de hacer click en botón de login");
 
       console.log("🖱️ Haciendo click en botón de login...");
-      await Promise.all([
-        page.click(".js-tkit-loading-button"),
-        page.waitForNavigation({ waitUntil: "networkidle2", timeout: 60000 }),
-      ]);
-      logCurrentUrl("después del login");
-      console.log("✅ Login completado, navegación exitosa");
+
+      // Simular hover natural antes del click
+      await page.hover(".js-tkit-loading-button");
+      await new Promise((r) => setTimeout(r, 200 + Math.random() * 300));
+
+      try {
+        await Promise.all([
+          page.click(".js-tkit-loading-button"),
+          page.waitForNavigation({ waitUntil: "networkidle2", timeout: 60000 }),
+        ]);
+        logCurrentUrl("después del login");
+        console.log("✅ Login completado, navegación exitosa");
+      } catch (loginError) {
+        console.error("❌ Error durante el login:", loginError.message);
+
+        // Verificar si seguimos en la página de login (indicador de detección de bot)
+        const currentUrl = page.url();
+        if (currentUrl.includes("login")) {
+          console.error(
+            "🚨 DETECTADO COMO BOT - Redirigido de vuelta al login"
+          );
+
+          // Intentar técnicas adicionales de evasión
+          console.log("🔄 Aplicando técnicas adicionales de evasión...");
+
+          // Limpiar todo y empezar de nuevo con más delays
+          await page.evaluate(() => {
+            // Limpiar campos
+            const emailField = document.querySelector("#user-mail");
+            const passField = document.querySelector("#pass");
+            if (emailField) emailField.value = "";
+            if (passField) passField.value = "";
+          });
+
+          // Simular comportamiento muy humano
+          await simulateHumanBehavior(page);
+
+          // Esperar más tiempo
+          await new Promise((r) => setTimeout(r, 3000 + Math.random() * 2000));
+
+          // Reintentar con delays más largos
+          console.log("🔄 Reintentando login con delays extendidos...");
+
+          await humanType(page, "#user-mail", USER_EMAIL);
+          await new Promise((r) => setTimeout(r, 1500 + Math.random() * 1000));
+
+          await humanType(page, "#pass", USER_PASSWORD);
+          await new Promise((r) => setTimeout(r, 2000 + Math.random() * 1500));
+
+          await solveRecaptchaIfPresent();
+
+          await page.hover(".js-tkit-loading-button");
+          await new Promise((r) => setTimeout(r, 500 + Math.random() * 500));
+
+          await Promise.all([
+            page.click(".js-tkit-loading-button"),
+            page.waitForNavigation({
+              waitUntil: "networkidle2",
+              timeout: 60000,
+            }),
+          ]);
+        } else {
+          throw loginError;
+        }
+      }
 
       // 2) 2FA con detección dinámica de selector
       console.log("🔐 PASO 2: Verificando si se requiere 2FA...");
 
       // Esperar un momento para que la página se cargue completamente
-      await new Promise((r) => setTimeout(r, 2000));
+      await new Promise((r) => setTimeout(r, 3000 + Math.random() * 2000));
       logCurrentUrl("después de esperar carga completa para 2FA");
 
       // Verificar si hay un selector de código 2FA
@@ -576,22 +1085,40 @@ async function loginTiendanube(orderId) {
         );
         logCurrentUrl("en página de 2FA");
 
+        // Simular comportamiento humano en 2FA
+        await simulateHumanBehavior(page);
+
         // Verificar reCAPTCHA en página de 2FA
         await solveRecaptchaIfPresent();
 
         const token = generateToken();
-
         console.log(`📝 Escribiendo código 2FA: ${token}`);
-        // Simular comportamiento humano para 2FA
-        await page.hover(found);
-        await new Promise((r) => setTimeout(r, 100 + Math.random() * 200));
-        await page.click(found);
-        await new Promise((r) => setTimeout(r, 200 + Math.random() * 300));
-        await page.type(found, token, { delay: 50 + Math.random() * 50 });
-        console.log("✅ Código 2FA escrito");
+
+        try {
+          await humanType(page, found, token);
+          console.log("✅ Código 2FA escrito con comportamiento humano");
+        } catch (tfaError) {
+          console.log(
+            "⚠️ Error con typing humano en 2FA, usando método alternativo"
+          );
+          await page.hover(found);
+          await new Promise((r) => setTimeout(r, 100 + Math.random() * 200));
+          await page.click(found);
+          await new Promise((r) => setTimeout(r, 200 + Math.random() * 300));
+          await page.type(found, token, { delay: 50 + Math.random() * 50 });
+        }
+
+        // Pausa antes de enviar 2FA
+        await new Promise((r) => setTimeout(r, 1000 + Math.random() * 1500));
 
         logCurrentUrl("antes de hacer click en botón de verificación 2FA");
         console.log("🖱️ Haciendo click en botón de verificación 2FA...");
+
+        await page.hover(
+          "#authentication-factor-verify-page input[type='submit']"
+        );
+        await new Promise((r) => setTimeout(r, 300 + Math.random() * 200));
+
         await Promise.all([
           page.click("#authentication-factor-verify-page input[type='submit']"),
           page.waitForNavigation({ waitUntil: "networkidle2", timeout: 60000 }),
@@ -606,8 +1133,12 @@ async function loginTiendanube(orderId) {
       console.log("🍪 Guardando cookies después del login exitoso...");
       await saveCookies(page);
 
-      // 3) Navegar al dashboard
+      // 3) Navegar al dashboard con comportamiento humano
       console.log("🏠 PASO 3: Navegando al dashboard...");
+
+      // Simular navegación humana gradual
+      await simulateHumanBehavior(page);
+
       logCurrentUrl("antes de navegar al dashboard");
       await page.goto(
         "https://perlastore6.mitiendanube.com/admin/v2/apps/envionube/ar/dashboard",
@@ -619,10 +1150,12 @@ async function loginTiendanube(orderId) {
       await solveRecaptchaIfPresent();
       logCurrentUrl("después de verificar reCAPTCHA en dashboard");
 
-      // Esperar a que la aplicación se cargue completamente
+      // Esperar a que la aplicación se cargue completamente con comportamiento humano
       console.log(
         "⏳ Esperando a que la aplicación se cargue completamente..."
       );
+
+      await simulateHumanBehavior(page);
 
       let attempts = 0;
       const maxAttempts = 30;
@@ -648,6 +1181,10 @@ async function loginTiendanube(orderId) {
         console.log(
           "⚠️ Tiempo máximo de espera alcanzado, intentando refrescar la página..."
         );
+
+        // Simular comportamiento humano antes del refresh
+        await simulateHumanBehavior(page);
+
         logCurrentUrl("antes del refresh final");
         await page.reload({ waitUntil: "networkidle2", timeout: 60000 });
         logCurrentUrl("después del refresh final");

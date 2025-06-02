@@ -19,6 +19,7 @@ const {
   PORT = 3001,
   MAX_ATTEMPTS = 3,
   SIMPLE_MODE = false,
+  TOKEN_ONLY_MODE = false,
 } = process.env;
 
 if (!USER_EMAIL || !USER_PASSWORD || !TOKEN_CODE || !API_TOKEN) {
@@ -845,6 +846,11 @@ async function loginTiendanube(orderId) {
 
           // Guardar cookies actuales
           await saveCookies(page);
+
+          // NUEVO: Si ya tenemos el token, podemos proceder inmediatamente
+          if (authHeader) {
+            console.log("🎯 Token capturado, procediendo con dispatch...");
+          }
         }
       }
     });
@@ -1220,6 +1226,8 @@ async function loginTiendanube(orderId) {
       throw new Error("No se capturó ningún header Authorization");
     }
 
+    console.log("🎯 Procediendo con la búsqueda y extracción del orderId...");
+
     // 4) Dentro del iframe de la app
     logCurrentUrl("antes de buscar iframe");
     const iframeH = await page.waitForSelector(
@@ -1261,12 +1269,14 @@ async function loginTiendanube(orderId) {
       timeout: 30000,
     });
     logCurrentUrl("antes de navegar a detalles de orden");
-    await Promise.all([
-      frame.click(orderSelector),
-      page.waitForNavigation({ waitUntil: "networkidle2", timeout: 30000 }),
-    ]);
-    logCurrentUrl("después de navegar a detalles de orden");
-    console.log(`✅ Navegado a detalles de la orden ${orderId}`);
+
+    // OPTIMIZACIÓN: Usar solo click sin waitForNavigation para evitar timeout
+    await frame.click(orderSelector);
+    console.log(`✅ Click en orden ${orderId} ejecutado`);
+
+    // Esperar un poco para que se cargue la nueva página
+    await new Promise((r) => setTimeout(r, 5000));
+    logCurrentUrl("después de click en orden");
 
     // --- NUEVO BLOQUE: extraer el ID de la URL ---
     const fullUrl = page.url();
@@ -1290,6 +1300,8 @@ async function loginTiendanube(orderId) {
       label: true,
       ordersIds: [shippingDetailsId],
     };
+
+    console.log("🚀 Enviando dispatch...");
     const response = await fetch(dispatchUrl, {
       method: "POST",
       headers: {
@@ -1310,9 +1322,64 @@ async function loginTiendanube(orderId) {
   } catch (err) {
     console.error("💥 Error en loginTiendanube:", err.message);
 
-    // Si hay error, eliminar cookies por si están corruptas
-    console.log("🗑️ Eliminando cookies por posible corrupción...");
-    await deleteCookiesFile();
+    // Agregar contexto del error
+    const currentUrl = page.url();
+    console.log(`🔗 URL cuando ocurrió el error: ${currentUrl}`);
+
+    // Solo eliminar cookies si NO capturamos el token exitosamente
+    if (!authHeader) {
+      console.log("🗑️ Eliminando cookies por falla en captura de token...");
+      await deleteCookiesFile();
+    } else {
+      console.log(
+        "✅ Token fue capturado exitosamente, manteniendo cookies..."
+      );
+      // Si ya capturamos el token pero hubo error después, intentar procesar lo capturado
+      if (authHeader && err.message.includes("timeout")) {
+        console.log(
+          "⚠️ Timeout después de capturar token, intentando proceso simplificado..."
+        );
+        try {
+          // Intentar extraer ID de la URL actual si es posible
+          const fullUrl = page.url();
+          console.log(`🔗 URL actual para extracción: ${fullUrl}`);
+          const match = fullUrl.match(/#\/shipping-details\/([^/?#]+)/);
+          if (match) {
+            const shippingDetailsId = match[1];
+            console.log(`🆔 ID extraído de URL: ${shippingDetailsId}`);
+
+            // Intentar dispatch con el token capturado
+            const dispatchUrl =
+              "https://nuvem-envio-app-back.ms.tiendanube.com/stores/dispatches";
+            const payload = {
+              createFile: {},
+              contentDeclaration: false,
+              label: true,
+              ordersIds: [shippingDetailsId],
+            };
+
+            const response = await fetch(dispatchUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: authHeader,
+              },
+              body: JSON.stringify(payload),
+            });
+
+            if (response.ok) {
+              console.log("🚀 Dispatch enviado exitosamente en recuperación!");
+              return { authHeader, shippingDetailsId };
+            }
+          }
+        } catch (recoveryErr) {
+          console.log(
+            "⚠️ Error en proceso de recuperación:",
+            recoveryErr.message
+          );
+        }
+      }
+    }
 
     throw err;
   } finally {
@@ -1321,6 +1388,177 @@ async function loginTiendanube(orderId) {
       await browser.close();
       console.log("✅ Browser cerrado");
     }
+  }
+}
+
+// MODO SOLO TOKEN (captura token y sale)
+async function tokenOnlyLogin(orderId) {
+  console.log("🔄 Usando MODO SOLO TOKEN");
+
+  const userAgent = new UserAgent();
+  const randomUA = userAgent.toString();
+
+  const browserOptions = {
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-blink-features=AutomationControlled",
+      "--disable-automation",
+      "--exclude-switches=enable-automation",
+    ],
+    headless: "shell",
+    slowMo: 30,
+    ignoreDefaultArgs: ["--disable-extensions", "--enable-automation"],
+    ignoreHTTPSErrors: true,
+    timeout: 60000,
+  };
+
+  const browser = await puppeteer.launch(browserOptions);
+
+  try {
+    const page = await browser.newPage();
+    await addAdvancedAntiDetection(page);
+    await page.setUserAgent(randomUA);
+
+    let authHeader = null;
+    const authHeaderRef = { value: null };
+
+    // Interceptar requests
+    page.on("request", async (req) => {
+      const url = req.url();
+      if (
+        (url.includes("/stores/orders") ||
+          url.includes("/api/") ||
+          url.includes("/admin/") ||
+          url.includes("envionube") ||
+          url.includes("nuvem-envio-app-back.ms.tiendanube.com")) &&
+        req.headers().authorization
+      ) {
+        authHeader = req.headers().authorization;
+        authHeaderRef.value = authHeader;
+        console.log(
+          `✅ Token capturado (solo token): ${authHeader.substring(0, 20)}...`
+        );
+        await saveCookies(page);
+      }
+    });
+
+    // Intentar con cookies primero
+    const cookiesLoaded = await loadCookies(page);
+    if (cookiesLoaded) {
+      console.log("🍪 Verificando cookies existentes...");
+      const cookiesValid = await verifyCookiesValid(page, authHeaderRef);
+
+      if (cookiesValid && authHeader) {
+        console.log("✅ Token obtenido con cookies existentes!");
+
+        // Hacer dispatch directamente con el token
+        const shippingDetailsId = `extracted-from-token-${Date.now()}`;
+        const dispatchUrl =
+          "https://nuvem-envio-app-back.ms.tiendanube.com/stores/dispatches";
+        const payload = {
+          createFile: {},
+          contentDeclaration: false,
+          label: true,
+          ordersIds: [orderId.replace("#", "")], // Usar orderId directamente
+        };
+
+        console.log("🚀 Enviando dispatch con token existente...");
+        const response = await fetch(dispatchUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: authHeader,
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (response.ok) {
+          console.log("🚀 Dispatch enviado exitosamente con cookies!");
+          return { authHeader, shippingDetailsId: orderId.replace("#", "") };
+        } else {
+          console.log("⚠️ Dispatch falló, continuando con login completo...");
+        }
+      }
+    }
+
+    // Si las cookies no funcionaron, hacer login
+    console.log("🔑 Realizando login para capturar token...");
+
+    // Login simplificado
+    await page.goto("https://www.tiendanube.com/login", {
+      waitUntil: "networkidle2",
+    });
+    await page.type("#user-mail", USER_EMAIL, { delay: 100 });
+    await page.type("#pass", USER_PASSWORD, { delay: 100 });
+    await Promise.all([
+      page.click(".js-tkit-loading-button"),
+      page.waitForNavigation({ waitUntil: "networkidle2" }),
+    ]);
+
+    // 2FA
+    const code2FA = generateToken();
+    await page.type("#code", code2FA, { delay: 100 });
+    await Promise.all([
+      page.click("#authentication-factor-verify-page input[type='submit']"),
+      page.waitForNavigation({ waitUntil: "networkidle2" }),
+    ]);
+
+    // Ir al dashboard solo para capturar token
+    console.log("🏠 Navegando al dashboard para capturar token...");
+    await page.goto(
+      "https://perlastore6.mitiendanube.com/admin/v2/apps/envionube/ar/dashboard",
+      { waitUntil: "networkidle2" }
+    );
+
+    // Esperar token máximo 15 segundos
+    let attempts = 0;
+    while (attempts < 15 && !authHeader) {
+      await new Promise((r) => setTimeout(r, 1000));
+      attempts++;
+      console.log(`⏳ Esperando token: ${attempts}/15`);
+    }
+
+    if (!authHeader) {
+      throw new Error("No se capturó token en modo solo-token");
+    }
+
+    console.log("✅ Token capturado exitosamente!");
+    await saveCookies(page);
+
+    // Hacer dispatch directamente sin navegar por la UI
+    const shippingDetailsId = orderId.replace("#", "");
+    const dispatchUrl =
+      "https://nuvem-envio-app-back.ms.tiendanube.com/stores/dispatches";
+    const payload = {
+      createFile: {},
+      contentDeclaration: false,
+      label: true,
+      ordersIds: [shippingDetailsId],
+    };
+
+    console.log("🚀 Enviando dispatch con token capturado...");
+    const response = await fetch(dispatchUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: authHeader,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(
+        `Error enviando dispatch (${response.status}): ${errText}`
+      );
+    }
+
+    console.log("🚀 Dispatch enviado exitosamente (modo solo token)!");
+    return { authHeader, shippingDetailsId };
+  } finally {
+    await browser.close();
   }
 }
 
@@ -1336,10 +1574,23 @@ app.post("/webhook", async (req, res) => {
 
   console.log("🔔 Webhook recibido, orderId:", orderId);
 
-  // Determinar qué función usar basado en SIMPLE_MODE
+  // Determinar qué función usar basado en las variables de entorno
+  let loginFunction, modeText;
+
+  const isTokenOnlyMode =
+    TOKEN_ONLY_MODE === "true" || TOKEN_ONLY_MODE === true;
   const isSimpleMode = SIMPLE_MODE === "true" || SIMPLE_MODE === true;
-  const loginFunction = isSimpleMode ? simpleLogin : loginTiendanube;
-  const modeText = isSimpleMode ? "MODO SIMPLE" : "MODO AVANZADO";
+
+  if (isTokenOnlyMode) {
+    loginFunction = tokenOnlyLogin;
+    modeText = "MODO SOLO TOKEN";
+  } else if (isSimpleMode) {
+    loginFunction = simpleLogin;
+    modeText = "MODO SIMPLE";
+  } else {
+    loginFunction = loginTiendanube;
+    modeText = "MODO AVANZADO";
+  }
 
   console.log(`🎯 Usando ${modeText}`);
 
@@ -1369,10 +1620,19 @@ app.post("/webhook", async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  const modeText =
-    SIMPLE_MODE === "true" || SIMPLE_MODE === true
-      ? "MODO SIMPLE"
-      : "MODO AVANZADO";
+  const isTokenOnlyMode =
+    TOKEN_ONLY_MODE === "true" || TOKEN_ONLY_MODE === true;
+  const isSimpleMode = SIMPLE_MODE === "true" || SIMPLE_MODE === true;
+
+  let modeText;
+  if (isTokenOnlyMode) {
+    modeText = "MODO SOLO TOKEN";
+  } else if (isSimpleMode) {
+    modeText = "MODO SIMPLE";
+  } else {
+    modeText = "MODO AVANZADO";
+  }
+
   console.log(
     `⚡️ Servidor escuchando en http://localhost:${PORT} - ${modeText}`
   );
